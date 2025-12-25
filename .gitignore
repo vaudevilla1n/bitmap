@@ -1,0 +1,6 @@
+*
+!all_gray.bmp
+!.gitignore
+!*.c
+!*.h
+!Makefile
