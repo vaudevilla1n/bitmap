@@ -263,17 +263,37 @@ void rgb_print(const rgb_t c) {
 	//printf("\033[38;2;%u;%u;%umthese things take time\n\033[0m", c.r, c.g, c.b);
 }
 
+static rgb_t pixel_to_rgb(void *p, const size_t bpp) {
+	switch (bpp) {
+	case 8: {
+		const uint8_t v = *(uint8_t *)p;
+		return (rgb_t) { v, v, v };
+	}
+
+	default: UNREACHABLE(pixel_to_rgb);
+	}
+}
+
 void bitmap_display(const bitmap_t *b) {
-	rgb_t c = { 0, 255, 0 };
-	rgb_print(c);
+	size_t start_y;
+	size_t step;
 
-	c = (rgb_t){ 255, 0, 0 }; 
-	rgb_print(c);
+	if (b->pixel_order == BOTTOM_UP) {
+		start_y = b->info_hdr.height - 1;
+		step = -1;
+	} else {
+		start_y = 0;
+		step = 1;
+	}
 
-	c = (rgb_t){ 0, 0, 255 }; 
-	rgb_print(c);
+	uint8_t *row = b->img + b->file_hdr.start_addr + (start_y * b->row_size);
+	for (size_t y = 0; y < b->info_hdr.height; y++) {
+		for (size_t p = 0; p < b->row_size; p++) {
+			const rgb_t c = pixel_to_rgb(row + p, b->info_hdr.bpp);
+			rgb_print(c);
+		}
+		row += (step * b->row_size);
+	}
 
 	printf("\n");
-	UNUSED(b);
-	TODO(bitmap_display);
 }

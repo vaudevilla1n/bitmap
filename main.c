@@ -12,6 +12,7 @@ int main(void) {
 		}
 
 		bitmap_info(bitmap);
+		bitmap_display(bitmap);
 		bitmap_close(bitmap);
 	}
 	{
@@ -23,7 +24,6 @@ int main(void) {
 		}
 
 		bitmap_info(bitmap);
-		bitmap_display(bitmap);
 		bitmap_close(bitmap);
 	}
 }
