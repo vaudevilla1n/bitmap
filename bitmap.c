@@ -1,5 +1,8 @@
 #include "bitmap.h"
 #include <stdio.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -18,16 +21,23 @@ static void *assert_ptr(void *p, const char *func) {
 #define TODO(x)		do { fprintf(stderr, "todo: %s\n", #x); abort(); } while (0)
 #define UNREACHABLE(x)	do { fprintf(stderr, "unreachable: %s\n", #x); abort(); } while (0)
 
+#define FILE_HDR_SIZE				0x0e
+
+#define FILE_HDR_MAGIC_WORD_OFFSET		0x00
+#define FILE_HDR_FILE_SIZE_OFFSET		0x02
+#define FILE_HDR_START_ADDR_OFFSET		0x0a
+
+#define INFO_HDR_SIZE_OFFSET			0x0e
+#define INFO_HDR_WIDTH_OFFSET			0x12
+#define INFO_HDR_HEIGHT_OFFSET			0x14
+#define INFO_HDR_BPP_OFFSET			0x18
+
 typedef struct {
 	uint8_t magic_word[2];
 	uint32_t file_size;
 	uint32_t start_addr;
 } file_hdr_t;
 
-#define FILE_HDR_SIZE				0x0e
-#define FILE_HDR_MAGIC_WORD_OFFSET		0x00
-#define FILE_HDR_FILE_SIZE_OFFSET		0x02
-#define FILE_HDR_START_ADDR_OFFSET		0x0a
 typedef enum {
 	UNKNOWN,
 	BITMAPCOREHEADER,
@@ -41,12 +51,15 @@ typedef enum {
 typedef struct {
 	uint32_t size;
 	info_hdr_type_t type;
+	uint16_t width;
+	uint16_t height;
+	uint16_t bpp;
 } info_hdr_t;
-
-#define INFO_HDR_SIZE_OFFSET			0x00
 
 struct bitmap_t {
 	const char *path;
+	uint8_t *img;
+	size_t img_size;
 
 	bitmap_err_t err;
 
@@ -80,8 +93,35 @@ static info_hdr_type_t determine_info_hdr_type(const uint32_t size) {
 	}
 }
 
-static inline bool valid_magic_word(const file_hdr_t *h) {
-	return h->magic_word[0] == 'B' && h->magic_word[1] == 'M';
+static uint8_t *map_file(const char *file, const int oflag, const int prot, size_t *file_size) {
+	struct stat fs = { 0 };
+	if (stat(file, &fs))
+		return NULL;
+
+	const int fd = open(file, oflag);
+	if (fd == -1)
+		return NULL;
+
+	void *m = mmap(NULL, fs.st_size, prot, MAP_PRIVATE, fd, 0);
+
+	if (m == MAP_FAILED) {
+		perror("mmamp");
+		abort();
+	}
+
+	*file_size = fs.st_size;
+	return m;
+}
+
+static void unmap_file(void *m, const size_t length) {
+	if (munmap(m, length)) {
+		perror("munmap");
+		abort();
+	}
+}
+
+static inline bool valid_magic_word(const uint8_t magic_word[2]) {
+	return magic_word[0] == 'B' && magic_word[1] == 'M';
 }
 
 static inline void set_error(bitmap_err_t *ret, const bitmap_err_t err) {
@@ -91,48 +131,41 @@ static inline void set_error(bitmap_err_t *ret, const bitmap_err_t err) {
 bitmap_t *bitmap_open(const char *file) {
 	bitmap_t *bitmap = xcalloc(1, sizeof(*bitmap));
 	bitmap->path = file;
+	bitmap->img = map_file(file, O_RDONLY, PROT_READ, &bitmap->img_size);
 
-	FILE *img = fopen(file, "r");
-	if (!img) {
+	if (!bitmap->img) {
 		bitmap->err = BITMAP_INVALID_PATH;
 		return bitmap;
 	}
 
-	uint8_t hdr[FILE_HDR_SIZE];
-	if (!fread(hdr, FILE_HDR_SIZE, 1, img))
+	bitmap->file_hdr.magic_word[0] = bitmap->img[FILE_HDR_MAGIC_WORD_OFFSET];
+	bitmap->file_hdr.magic_word[1] = bitmap->img[FILE_HDR_MAGIC_WORD_OFFSET + 1];
+
+	if(!valid_magic_word(bitmap->file_hdr.magic_word))
 		goto format_error;
 
-	file_hdr_t *file_hdr = &bitmap->file_hdr;
-	
-	file_hdr->magic_word[0] = hdr[FILE_HDR_MAGIC_WORD_OFFSET];
-	file_hdr->magic_word[1] = hdr[FILE_HDR_MAGIC_WORD_OFFSET + 1];
+	bitmap->file_hdr.file_size	= *(uint32_t *)(bitmap->img + FILE_HDR_FILE_SIZE_OFFSET);
+	bitmap->file_hdr.start_addr	= *(uint32_t *)(bitmap->img + FILE_HDR_START_ADDR_OFFSET);
 
-	if(!valid_magic_word(file_hdr))
-		goto format_error;
-	
-	file_hdr->file_size = *(uint32_t *)(hdr + FILE_HDR_FILE_SIZE_OFFSET);
-	file_hdr->start_addr = *(uint32_t *)(hdr + FILE_HDR_START_ADDR_OFFSET);
+	bitmap->info_hdr.size = *(uint32_t *)(bitmap->img + INFO_HDR_SIZE_OFFSET);
+	bitmap->info_hdr.type = determine_info_hdr_type(bitmap->info_hdr.size);
 
-	info_hdr_t *info_hdr = &bitmap->info_hdr;
-	
-	if (!fread(&info_hdr->size, sizeof(info_hdr->size), 1, img))
+	if (bitmap->info_hdr.type == UNKNOWN)
 		goto format_error;
 
-	info_hdr->type = determine_info_hdr_type(info_hdr->size);
-	if (info_hdr->type == UNKNOWN)
-		goto format_error;
+	bitmap->info_hdr.width	= *(uint16_t *)(bitmap->img + INFO_HDR_WIDTH_OFFSET);
+	bitmap->info_hdr.height	= *(uint16_t *)(bitmap->img + INFO_HDR_HEIGHT_OFFSET);
+	bitmap->info_hdr.bpp	= *(uint16_t *)(bitmap->img + INFO_HDR_BPP_OFFSET);
 
-	fclose(img);
 	bitmap->err = BITMAP_OK;
 	return bitmap;
-
 format_error:
-	fclose(img);
 	bitmap->err = BITMAP_INVALID_FORMAT;
 	return bitmap;
 }
 
 void bitmap_close(bitmap_t *b) {
+	unmap_file(b->img, b->img_size);
 	free(b);
 }
 
@@ -156,8 +189,9 @@ void bitmap_warn(const bitmap_t *b) {
 
 void bitmap_info(const bitmap_t *b) {
 	printf("\"%s\" (%uB)\n", b->path, b->file_hdr.file_size);
-	printf("magic word ::= \'%c\' \'%c\'\n", b->file_hdr.magic_word[0], b->file_hdr.magic_word[1]);
-	printf("pixel data start address ::= 0x%x\n", b->file_hdr.start_addr);
+	printf("{ \'%c\' \'%c\'}\n", b->file_hdr.magic_word[0], b->file_hdr.magic_word[1]);
+	printf("pixels @ 0x%x\n", b->file_hdr.start_addr);
 
 	printf("\n%s (info header, %uB)\n", info_hdr_type_to_string(b->info_hdr.type),  b->info_hdr.size);
+	printf("(%hu x %hu) %ubpp\n", b->info_hdr.width, b->info_hdr.height, b->info_hdr.bpp);
 }
