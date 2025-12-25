@@ -292,6 +292,8 @@ void bitmap_display(const bitmap_t *b) {
 			const rgb_t c = pixel_to_rgb(row + p, b->info_hdr.bpp);
 			rgb_print(c);
 		}
+		printf("\n");
+
 		row += (step * b->row_size);
 	}
 
