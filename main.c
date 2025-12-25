@@ -2,11 +2,10 @@
 #include <stdio.h>
 
 int main(void) {
-	bitmap_err_t err;
-	bitmap_t *bitmap = bitmap_open("all_gray.bmp", &err);
+	bitmap_t *bitmap = bitmap_open("all_gray.bmp");
 
-	if (err != BITMAP_OK) {
-		bitmap_error("all_gray.bmp", err);
+	if (bitmap_error(bitmap)) {
+		bitmap_warn(bitmap);
 		return 1;
 	}
 
