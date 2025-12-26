@@ -5,4 +5,4 @@ bitmap: main.c bitmap.c bitmap.h
 
 .PHONY: clean
 clean:
-	rm -f ./main
+	rm -f ./bitmap

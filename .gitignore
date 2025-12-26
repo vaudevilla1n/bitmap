@@ -1,6 +1,5 @@
 *
-!all_gray.bmp
-!bmp_08.bmp
+!*.bmp
 !.gitignore
 !*.c
 !*.h

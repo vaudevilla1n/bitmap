@@ -53,19 +53,6 @@ typedef enum {
 	BITMAPV5HEADER,
 } info_hdr_type_t;
 
-static const char *info_hdr_type_to_string(const info_hdr_type_t type) {
-	switch (type) {
-	case BITMAPCOREHEADER:		return "BITMAPCOREHEADER";
-	case OS22XBITMAPHEADER_16:	return "OS22XBITMAPHEADER_16";
-	case OS22XBITMAPHEADER:		return "OS22XBITMAPHEADER";
-	case BITMAPINFOHEADER:		return "BITMAPINFOHEADER";
-	case BITMAPV4HEADER:		return "BITMAPV4HEADER";
-	case BITMAPV5HEADER:		return "BITMAPV5HEADER";
-
-	default:			UNREACHABLE(info_hdr_type_to_string);
-	}
-}
-
 typedef struct {
 	uint32_t size;
 	info_hdr_type_t type;
@@ -249,8 +236,7 @@ void bitmap_warn(const bitmap_t *b) {
 void bitmap_info(const bitmap_t *b) {
 	printf("\"%s\" (%uB) ", b->path, b->file_hdr.file_size);
 	printf("\'%c\' \'%c\' ", b->file_hdr.magic_word[0], b->file_hdr.magic_word[1]);
-	printf("%ux%u (%zuB row) %ubpp ", b->info_hdr.width, b->info_hdr.height, b->row_size, b->info_hdr.bpp);
-	printf("%s (%uB)\n", info_hdr_type_to_string(b->info_hdr.type),  b->info_hdr.size);
+	printf("%ux%u (%zuB row) %ubpp\n", b->info_hdr.width, b->info_hdr.height, b->row_size, b->info_hdr.bpp);
 }
 
 typedef uint32_t pixel_t;
@@ -302,14 +288,30 @@ void rgb_print(const rgb_t c) {
 
 static rgb_t pixel_to_rgb(const pixel_t p, const size_t bpp) {
 	switch (bpp) {
-	case 8: {
+	case 1:
+	case 2:
+	case 4:
+	case 8:
 		return (rgb_t) { p, p, p };
-	}
 
+	case 16: {
+		const uint8_t r = p % (1 << 5);
+		const uint8_t g = (p >> 5) % (1 << 5);
+		const uint8_t b = (p >> 10) % (1 << 5);
+		return (rgb_t) { r, g, b };
+	}
 	case 24: {
 		const uint8_t r = p % 256;
 		const uint8_t g = (p >> 8) % 256;
 		const uint8_t b = (p >> 16) % 256;
+		return (rgb_t) { r, g, b };
+	}
+	case 32: {
+		// skipping alpha again because that cant be displayed in the terminal
+		
+		const uint8_t r = (p >> 8) % 256;
+		const uint8_t g = (p >> 16) % 256;
+		const uint8_t b = (p >> 24) % 256;
 		return (rgb_t) { r, g, b };
 	}
 
