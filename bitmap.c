@@ -253,21 +253,64 @@ void bitmap_info(const bitmap_t *b) {
 	printf("%s (%uB)\n", info_hdr_type_to_string(b->info_hdr.type),  b->info_hdr.size);
 }
 
+typedef uint32_t pixel_t;
+
+static pixel_t pixel_at(const uint8_t *row, const size_t bpp, const size_t i) {
+	const size_t bits = bpp * i;
+	row += bits / 8;
+
+	switch (bpp) {
+	case 1: {
+		return  (*row >> ((8 - (bits % 8)) % 8)) & 1; 
+	}
+	case 2: {
+		return  (*row >> (2 * ((8 - (bits % 8)) % 8))) & 1; 
+	}
+	case 4: {
+		return  (*row >> (4 * ((8 - (bits % 8)) % 8))) & 1; 
+	}
+	case 8: {
+		return *row;
+	}
+	case 16: {
+		return *(uint16_t*)row;
+	}
+	case 24: {
+		pixel_t p = row[0];
+		p = (p << 0x8) | row[1];
+		p = (p << 0x8) | row[2];
+
+		return p;
+	}
+	case 32: {
+		return *(uint32_t*)row;
+	}
+
+	default: UNREACHABLE(pixel_at);	
+	}
+}
+
 typedef struct {
 	uint8_t r, g, b;
 } rgb_t;
 
 void rgb_print(const rgb_t c) {
-	printf("\033[38;2;%u;%u;%um\033[48;2;%u;%u;%um|||||\033[0m", c.r, c.g, c.b, c.r, c.g, c.b);
+	printf("\033[38;2;%u;%u;%um\033[48;2;%u;%u;%um^\033[0m", c.r, c.g, c.b, c.r, c.g, c.b);
 	//printf("\033[38;2;%u;%u;%um\033[48;2;%u;%u;%umthese things take time\n\033[0m", c.r, c.g, c.b, c.r, c.g, c.b);
 	//printf("\033[38;2;%u;%u;%umthese things take time\n\033[0m", c.r, c.g, c.b);
 }
 
-static rgb_t pixel_to_rgb(void *p, const size_t bpp) {
+static rgb_t pixel_to_rgb(const pixel_t p, const size_t bpp) {
 	switch (bpp) {
 	case 8: {
-		const uint8_t v = *(uint8_t *)p;
-		return (rgb_t) { v, v, v };
+		return (rgb_t) { p, p, p };
+	}
+
+	case 24: {
+		const uint8_t r = p % 256;
+		const uint8_t g = (p >> 8) % 256;
+		const uint8_t b = (p >> 16) % 256;
+		return (rgb_t) { r, g, b };
 	}
 
 	default: UNREACHABLE(pixel_to_rgb);
@@ -288,8 +331,9 @@ void bitmap_display(const bitmap_t *b) {
 
 	uint8_t *row = b->img + b->file_hdr.start_addr + (start_y * b->row_size);
 	for (size_t y = 0; y < b->info_hdr.height; y++) {
-		for (size_t p = 0; p < b->row_size; p++) {
-			const rgb_t c = pixel_to_rgb(row + p, b->info_hdr.bpp);
+		for (size_t x = 0; x < b->info_hdr.width; x++) {
+			const pixel_t p = pixel_at(row, b->info_hdr.bpp, x);
+			const rgb_t c = pixel_to_rgb(p, b->info_hdr.bpp);
 			rgb_print(c);
 		}
 		printf("\n");

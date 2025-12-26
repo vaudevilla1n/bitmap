@@ -1,7 +1,7 @@
 CFLAGS = -Wall -Wextra -Wpedantic -ggdb
 
-main: main.c bitmap.c bitmap.h
-	$(CC) $(CFLAGS) main.c bitmap.c -o main
+bitmap: main.c bitmap.c bitmap.h
+	$(CC) $(CFLAGS) main.c bitmap.c -o bitmap
 
 .PHONY: clean
 clean:

@@ -1,29 +1,26 @@
 #include "bitmap.h"
 #include <stdio.h>
+#include <stdlib.h>
 
-int main(void) {
-	{
-		bitmap_t *bitmap = bitmap_open("all_gray.bmp", BITMAP_RD);
-		//bitmap_t *bitmap = bitmap_open("broken.bmp", BITMAP_RD);
+void usage(void) {
+	fprintf(stderr, "usage: bitmap FILE...\n");
+	exit(1);
+}
 
-		if (bitmap_error(bitmap)) {
-			bitmap_warn(bitmap);
-			return 1;
-		}
-
-		bitmap_info(bitmap);
-		bitmap_display(bitmap);
-		bitmap_close(bitmap);
-	}
-	{
-		bitmap_t *bitmap = bitmap_open("blackbuck.bmp", BITMAP_RD);
+int main(int argc, char **argv) {
+	if (argc == 1)
+		usage();
+	
+	for (int i = 1; i < argc; i++) {
+		bitmap_t *bitmap = bitmap_open(argv[i], BITMAP_RD);
 
 		if (bitmap_error(bitmap)) {
 			bitmap_warn(bitmap);
-			return 1;
+		} else {
+			bitmap_info(bitmap);
+			bitmap_display(bitmap);
 		}
 
-		bitmap_info(bitmap);
 		bitmap_close(bitmap);
 	}
 }
